@@ -11,14 +11,15 @@ import androidx.room.PrimaryKey
         entity          = Notebook::class,
         parentColumns   = ["id"],
         childColumns    = ["notebookId"],
-        onDelete        = ForeignKey.CASCADE   // si borras un cuaderno, se borran sus secciones
+        onDelete        = ForeignKey.CASCADE
     )],
-    indices = [Index("notebookId")]            // acelera las búsquedas por notebookId
+    indices = [Index("notebookId"), Index("parentSectionId")]
 )
 data class Section(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    val notebookId: Long,                      // FK → Notebook.id
+    val notebookId: Long,
+    val parentSectionId: Long? = null,         // null = sección raíz; no null = sub-sección
     val name: String,
     val color: String,
     val createdAt: Long = System.currentTimeMillis(),

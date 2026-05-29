@@ -17,10 +17,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.core.content.res.ResourcesCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tuapp.notasmd.R
@@ -57,16 +68,42 @@ fun EditorScreen(
     var contentField    by remember { mutableStateOf(TextFieldValue("")) }
     var showColorDialog by remember { mutableStateOf(false) }
     var selectedColor   by remember { mutableStateOf("#E53935") }
+    // líneas tal como estaban en el último guardado (sin timestamp), para detectar cambios
+    var savedLines by remember { mutableStateOf<List<String>>(emptyList()) }
 
     LaunchedEffect(uiState.content) {
         if (contentField.text.isEmpty() && uiState.content.isNotEmpty()) {
             contentField = TextFieldValue(uiState.content)
+            savedLines = uiState.content.split('\n').map { stripLineTimestamp(it) }
         }
     }
 
-    BackHandler {
-        viewModel.onContentChange(contentField.text)
+    // Aplica timestamps a las líneas modificadas y guarda
+    fun saveWithTimestamps() {
+        val now  = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+        val lines = contentField.text.split('\n')
+        val newLines = lines.mapIndexed { i, line ->
+            val stripped  = stripLineTimestamp(line)
+            val savedLine = savedLines.getOrNull(i) ?: ""
+            when {
+                stripped.isBlank()    -> stripped
+                stripped != savedLine -> "$stripped [$now]"
+                else                  -> line
+            }
+        }
+        val newContent = newLines.joinToString("\n")
+        val newSel = TextRange(
+            contentField.selection.start.coerceAtMost(newContent.length),
+            contentField.selection.end.coerceAtMost(newContent.length)
+        )
+        contentField = TextFieldValue(text = newContent, selection = newSel)
+        savedLines   = newLines.map { stripLineTimestamp(it) }
+        viewModel.onContentChange(newContent)
         viewModel.saveNote()
+    }
+
+    BackHandler {
+        saveWithTimestamps()
         onNavigateBack()
     }
 
@@ -82,8 +119,7 @@ fun EditorScreen(
             TopAppBar(
                 navigationIcon = {
                     IconButton(onClick = {
-                        viewModel.onContentChange(contentField.text)
-                        viewModel.saveNote()
+                        saveWithTimestamps()
                         onNavigateBack()
                     }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver")
@@ -111,8 +147,7 @@ fun EditorScreen(
                     }
                     // Indicador de guardado / botón guardar
                     IconButton(onClick = {
-                        viewModel.onContentChange(contentField.text)
-                        viewModel.saveNote()
+                        saveWithTimestamps()
                     }) {
                         Icon(
                             imageVector = if (uiState.isSaved) Icons.Default.Check
@@ -183,6 +218,14 @@ fun EditorScreen(
                         contentField = insertAtLineStart(contentField, prefix)
                         viewModel.onContentChange(contentField.text)
                     },
+                    onIndent = {
+                        contentField = indentLine(contentField)
+                        viewModel.onContentChange(contentField.text)
+                    },
+                    onDedent = {
+                        contentField = dedentLine(contentField)
+                        viewModel.onContentChange(contentField.text)
+                    },
                     onColorRequest = { showColorDialog = true }
                 )
                 HorizontalDivider()
@@ -195,28 +238,40 @@ fun EditorScreen(
                         .verticalScroll(rememberScrollState())
                         .padding(16.dp)
                 ) {
-                    MarkdownPreview(content = uiState.content)
+                    MarkdownPreview(content = uiState.content.split('\n').joinToString("\n") { stripLineTimestamp(it) })
                 }
             } else {
-                TextField(
-                    value         = contentField,
-                    onValueChange = { newValue ->
-                        contentField = newValue
-                        viewModel.onContentChange(newValue.text)
-                    },
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(
-                        color = MaterialTheme.colorScheme.onBackground
-                    ),
-                    placeholder = {
-                        Text(
-                            "Escribe en Markdown...",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    },
-                    colors   = transparentTextFieldColors(),
-                    modifier = Modifier.fillMaxSize()
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    TextField(
+                        value         = contentField,
+                        onValueChange = { newValue ->
+                            val processed = autocontinueBulletList(contentField, newValue)
+                            contentField = processed
+                            viewModel.onContentChange(processed.text)
+                        },
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(
+                            color = MaterialTheme.colorScheme.onBackground
+                        ),
+                        placeholder = {
+                            Text(
+                                "Escribe en Markdown...",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        },
+                        visualTransformation = MarkdownVisualTransformation(
+                            timestampColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        colors   = transparentTextFieldColors(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .defaultMinSize(minHeight = 300.dp)
+                    )
+                }
             }
         }
     }
@@ -273,11 +328,178 @@ private fun insertAtLineStart(
     field:  TextFieldValue,
     prefix: String
 ): TextFieldValue {
-    val text      = field.text
-    val cursor    = field.selection.start
-    val lineStart = (text.lastIndexOf('\n', cursor - 1) + 1).coerceAtLeast(0)
-    val newText   = text.substring(0, lineStart) + prefix + text.substring(lineStart)
-    return TextFieldValue(text = newText, selection = TextRange(cursor + prefix.length))
+    val text = field.text
+    val sel  = field.selection
+
+    if (sel.collapsed) {
+        val lineStart = (text.lastIndexOf('\n', sel.start - 1) + 1).coerceAtLeast(0)
+        val newText   = text.substring(0, lineStart) + prefix + text.substring(lineStart)
+        return TextFieldValue(text = newText, selection = TextRange(sel.start + prefix.length))
+    }
+
+    val selStart      = minOf(sel.start, sel.end)
+    val selEnd        = maxOf(sel.start, sel.end)
+    val firstLineStart = (text.lastIndexOf('\n', selStart - 1) + 1).coerceAtLeast(0)
+    val section        = text.substring(firstLineStart, selEnd)
+    val modified       = section.split('\n').joinToString("\n") { prefix + it }
+    val newText        = text.substring(0, firstLineStart) + modified + text.substring(selEnd)
+    val added          = modified.length - section.length
+    return TextFieldValue(
+        text      = newText,
+        selection = TextRange(selStart + prefix.length, selEnd + added)
+    )
+}
+
+private fun autocontinueBulletList(
+    oldField: TextFieldValue,
+    newField: TextFieldValue
+): TextFieldValue {
+    val oldText = oldField.text
+    val newText = newField.text
+    val cursor  = newField.selection.start
+
+    if (newText.length != oldText.length + 1) return newField
+    if (cursor <= 0 || newText[cursor - 1] != '\n') return newField
+
+    val prevLineEnd   = cursor - 1
+    val prevLineStart = (newText.lastIndexOf('\n', prevLineEnd - 1) + 1).coerceAtLeast(0)
+    val prevLine      = newText.substring(prevLineStart, prevLineEnd)
+
+    val indentation  = prevLine.takeWhile { it == ' ' }
+    val trimmed      = prevLine.trimStart()
+
+    val bulletPrefix = when {
+        trimmed.startsWith("- [ ] ") || trimmed.startsWith("- [x] ") -> "- [ ] "
+        trimmed.startsWith("- ")  -> "- "
+        trimmed.startsWith("* ")  -> "* "
+        trimmed.startsWith("> ")  -> "> "
+        trimmed.matches(Regex("""^\d+\. .*""")) -> {
+            val num = trimmed.substringBefore(". ").toIntOrNull() ?: 1
+            "${num + 1}. "
+        }
+        else -> return newField
+    }
+
+    val fullPrefix = indentation + bulletPrefix
+
+    // Si la línea anterior solo tenía el prefijo (vacía), cancelar la lista
+    if (trimmed.removePrefix(bulletPrefix).isBlank()) {
+        val cleaned = newText.substring(0, prevLineStart) + newText.substring(prevLineEnd)
+        return TextFieldValue(text = cleaned, selection = TextRange(prevLineStart))
+    }
+
+    val inserted = newText.substring(0, cursor) + fullPrefix + newText.substring(cursor)
+    return TextFieldValue(text = inserted, selection = TextRange(cursor + fullPrefix.length))
+}
+
+private fun indentLine(field: TextFieldValue): TextFieldValue {
+    val text = field.text
+    val sel  = field.selection
+
+    if (sel.collapsed) {
+        val lineStart = (text.lastIndexOf('\n', sel.start - 1) + 1).coerceAtLeast(0)
+        val newText   = text.substring(0, lineStart) + "  " + text.substring(lineStart)
+        return TextFieldValue(text = newText, selection = TextRange(sel.start + 2))
+    }
+
+    val selStart       = minOf(sel.start, sel.end)
+    val selEnd         = maxOf(sel.start, sel.end)
+    val firstLineStart = (text.lastIndexOf('\n', selStart - 1) + 1).coerceAtLeast(0)
+    val section        = text.substring(firstLineStart, selEnd)
+    val modified       = section.split('\n').joinToString("\n") { "  $it" }
+    val added          = modified.length - section.length
+    val newText        = text.substring(0, firstLineStart) + modified + text.substring(selEnd)
+    return TextFieldValue(text = newText, selection = TextRange(selStart + 2, selEnd + added))
+}
+
+private fun dedentLine(field: TextFieldValue): TextFieldValue {
+    val text = field.text
+    val sel  = field.selection
+
+    if (sel.collapsed) {
+        val lineStart = (text.lastIndexOf('\n', sel.start - 1) + 1).coerceAtLeast(0)
+        val lineEnd   = text.indexOf('\n', lineStart).let { if (it == -1) text.length else it }
+        val spaces    = text.substring(lineStart, lineEnd).takeWhile { it == ' ' }.length.coerceAtMost(2)
+        if (spaces == 0) return field
+        val newText   = text.substring(0, lineStart) + text.substring(lineStart + spaces)
+        return TextFieldValue(text = newText, selection = TextRange((sel.start - spaces).coerceAtLeast(lineStart)))
+    }
+
+    val selStart       = minOf(sel.start, sel.end)
+    val selEnd         = maxOf(sel.start, sel.end)
+    val firstLineStart = (text.lastIndexOf('\n', selStart - 1) + 1).coerceAtLeast(0)
+    val section        = text.substring(firstLineStart, selEnd)
+    val modified       = section.split('\n').joinToString("\n") { line ->
+        val spaces = line.takeWhile { it == ' ' }.length.coerceAtMost(2)
+        line.substring(spaces)
+    }
+    val removed  = section.length - modified.length
+    val newText  = text.substring(0, firstLineStart) + modified + text.substring(selEnd)
+    return TextFieldValue(text = newText, selection = TextRange(selStart, (selEnd - removed).coerceAtLeast(selStart)))
+}
+
+private fun stripLineTimestamp(line: String): String =
+    line.replace(Regex(""" \[\d{2}:\d{2}]$"""), "")
+
+private class MarkdownVisualTransformation(
+    private val timestampColor: Color = Color.Gray
+) : VisualTransformation {
+    private val timestampRegex = Regex(""" \[\d{2}:\d{2}]""")
+
+    override fun filter(text: AnnotatedString): TransformedText {
+        val str    = text.text
+        val spans  = mutableListOf<AnnotatedString.Range<SpanStyle>>()
+
+        // Bold: **text**
+        Regex("""\*\*(.+?)\*\*""", RegexOption.DOT_MATCHES_ALL).findAll(str).forEach { m ->
+            spans.add(AnnotatedString.Range(SpanStyle(fontWeight = FontWeight.Bold), m.range.first, m.range.last + 1))
+        }
+
+        // Italic: *text* (not preceded/followed by another *)
+        Regex("""(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)""", RegexOption.DOT_MATCHES_ALL).findAll(str).forEach { m ->
+            spans.add(AnnotatedString.Range(SpanStyle(fontStyle = FontStyle.Italic), m.range.first, m.range.last + 1))
+        }
+
+        // Timestamps [HH:mm] → pequeño y gris
+        timestampRegex.findAll(str).forEach { m ->
+            spans.add(AnnotatedString.Range(
+                SpanStyle(fontSize = 10.sp, color = timestampColor),
+                m.range.first, m.range.last + 1
+            ))
+        }
+
+        // Viñetas: reemplazar "- " al inicio de línea (con posible sangría) por "• "
+        // Ambos son 2 caracteres → offset mapping Identity sigue siendo válido
+        val transformed = buildString {
+            var i = 0
+            while (i < str.length) {
+                // Detectar inicio de línea (posición 0 o después de \n)
+                val atLineStart = i == 0 || str[i - 1] == '\n'
+                if (atLineStart) {
+                    // Saltar espacios de sangría
+                    var j = i
+                    while (j < str.length && str[j] == ' ') j++
+                    // Verificar si sigue "- " (y no "- [ ]" que es checkbox)
+                    if (j < str.length - 1 && str[j] == '-' && str[j + 1] == ' ' &&
+                        !(j + 3 < str.length && str.substring(j, j + 4) == "- [")) {
+                        // Copiar sangría
+                        append(str.substring(i, j))
+                        // Sustituir "- " → "• "
+                        append("• ")
+                        i = j + 2
+                        continue
+                    }
+                }
+                append(str[i])
+                i++
+            }
+        }
+
+        return TransformedText(
+            AnnotatedString(text = transformed, spanStyles = spans),
+            OffsetMapping.Identity
+        )
+    }
 }
 
 @Composable

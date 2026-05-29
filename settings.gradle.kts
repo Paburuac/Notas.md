@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "NotasMd"
+rootProject.name = "Coppermind"
 include(":app")

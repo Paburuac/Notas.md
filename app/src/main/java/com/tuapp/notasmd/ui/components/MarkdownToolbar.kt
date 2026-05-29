@@ -19,6 +19,8 @@ import androidx.compose.ui.unit.dp
 fun MarkdownToolbar(
     onInsert:      (prefix: String, suffix: String) -> Unit,
     onInsertLine:  (prefix: String) -> Unit,
+    onIndent:      () -> Unit,
+    onDedent:      () -> Unit,
     onColorRequest: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -59,6 +61,14 @@ fun MarkdownToolbar(
         // Checkbox
         ToolbarIconBtn(onClick = { onInsertLine("- [ ] ") }) {
             Icon(Icons.Default.CheckBox, "Tarea")
+        }
+        // Aumentar sangría
+        ToolbarIconBtn(onClick = onIndent) {
+            Icon(Icons.Default.FormatIndentIncrease, "Aumentar sangría")
+        }
+        // Reducir sangría
+        ToolbarIconBtn(onClick = onDedent) {
+            Icon(Icons.Default.FormatIndentDecrease, "Reducir sangría")
         }
 
         ToolbarSep()

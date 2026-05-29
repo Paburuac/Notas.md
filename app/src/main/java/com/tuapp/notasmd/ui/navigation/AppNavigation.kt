@@ -68,15 +68,18 @@ fun AppNavigation() {
         ) { backStackEntry ->
             val sectionId = backStackEntry.arguments?.getLong("sectionId") ?: return@composable
             val viewModel: NoteViewModel = viewModel(
-                factory = NoteViewModel.factory(app.noteRepository, sectionId)
+                factory = NoteViewModel.factory(app.noteRepository, app.sectionRepository, sectionId)
             )
             NotesScreen(
-                viewModel          = viewModel,
-                sectionId          = sectionId,
-                onNavigateToEditor = { sid, noteId ->
+                viewModel              = viewModel,
+                sectionId              = sectionId,
+                onNavigateToEditor     = { sid, noteId ->
                     navController.navigate(Screen.Editor.createRoute(sid, noteId))
                 },
-                onNavigateBack     = { navController.popBackStack() }
+                onNavigateToSubSection = { subSectionId ->
+                    navController.navigate(Screen.Notes.createRoute(subSectionId))
+                },
+                onNavigateBack         = { navController.popBackStack() }
             )
         }
 
