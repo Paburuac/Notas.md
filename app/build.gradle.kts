@@ -72,6 +72,9 @@ dependencies {
     // Coroutines — para operaciones de BD sin bloquear la UI
     implementation(libs.kotlinx.coroutines.android)
 
+    // WorkManager — tareas recurrentes y notificaciones
+    implementation(libs.androidx.work.runtime.ktx)
+
     // Markwon — renderizar Markdown en la vista previa
     implementation(libs.markwon.core)
     implementation(libs.markwon.html)    // necesario para los <span> de color

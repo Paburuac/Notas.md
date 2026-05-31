@@ -9,6 +9,9 @@ class SectionRepository(private val sectionDao: SectionDao) {
     fun getSectionsByNotebook(notebookId: Long): Flow<List<Section>> =
         sectionDao.getSectionsByNotebook(notebookId)
 
+    suspend fun getSectionsByNotebookOnce(notebookId: Long): List<Section> =
+        sectionDao.getSectionsByNotebookOnce(notebookId)
+
     fun getSubSections(parentSectionId: Long): Flow<List<Section>> =
         sectionDao.getSubSections(parentSectionId)
 

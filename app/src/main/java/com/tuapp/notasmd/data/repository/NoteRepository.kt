@@ -20,4 +20,10 @@ class NoteRepository(private val noteDao: NoteDao) {
 
     suspend fun deleteNote(note: Note) =
         noteDao.deleteNote(note)
+
+    suspend fun moveNote(noteId: Long, newSectionId: Long) =
+        noteDao.updateNoteSectionId(noteId, newSectionId, System.currentTimeMillis())
+
+    suspend fun getNotesByIds(ids: List<Long>): List<Note> =
+        noteDao.getNotesByIds(ids)
 }

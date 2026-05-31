@@ -244,6 +244,7 @@ fun EditorScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
+                        .imePadding()
                         .verticalScroll(rememberScrollState())
                 ) {
                     TextField(

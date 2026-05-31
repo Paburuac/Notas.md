@@ -21,4 +21,10 @@ interface NoteDao {
 
     @Delete
     suspend fun deleteNote(note: Note)
+
+    @Query("UPDATE notes SET sectionId = :newSectionId, updatedAt = :updatedAt WHERE id = :noteId")
+    suspend fun updateNoteSectionId(noteId: Long, newSectionId: Long, updatedAt: Long)
+
+    @Query("SELECT * FROM notes WHERE id IN (:ids)")
+    suspend fun getNotesByIds(ids: List<Long>): List<Note>
 }

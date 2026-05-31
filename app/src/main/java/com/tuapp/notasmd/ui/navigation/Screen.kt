@@ -12,11 +12,18 @@ sealed class Screen(val route: String) {
         fun createRoute(sectionId: Long) = "notes/$sectionId"
     }
 
-    // noteId es opcional: -1 significa nota nueva
     object Editor : Screen("editor/{sectionId}?noteId={noteId}") {
         fun createRoute(sectionId: Long, noteId: Long = -1L) =
             "editor/$sectionId?noteId=$noteId"
     }
 
     object Settings : Screen("settings")
+
+    object Checklist : Screen("checklist")
+
+    object Clock : Screen("clock")
+
+    object Calendar : Screen("calendar")
+
+    object Habits : Screen("habits")
 }

@@ -16,6 +16,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tuapp.notasmd.data.local.entity.Note
+import com.tuapp.notasmd.data.local.entity.Notebook
 import com.tuapp.notasmd.data.local.entity.Section
 import com.tuapp.notasmd.ui.components.DeleteConfirmDialog
 import com.tuapp.notasmd.ui.components.NameColorDialog
@@ -144,7 +145,8 @@ fun NotesScreen(
                     NoteCard(
                         note     = note,
                         onClick  = { onNavigateToEditor(sectionId, note.id) },
-                        onDelete = { viewModel.showDeleteDialog(note) }
+                        onDelete = { viewModel.showDeleteDialog(note) },
+                        onMove   = { viewModel.showMoveDialog(note) }
                     )
                 }
             }
@@ -166,6 +168,81 @@ fun NotesScreen(
             onDismiss = { viewModel.hideDeleteDialog() }
         )
     }
+
+    if (uiState.noteToMove != null) {
+        MoveNoteDialog(
+            notebooks        = uiState.moveNotebooks,
+            selectedNotebook = uiState.moveSelectedNotebook,
+            sections         = uiState.moveSections,
+            onSelectNotebook = { viewModel.selectNotebookForMove(it) },
+            onConfirm        = { viewModel.moveNote(it) },
+            onDismiss        = { viewModel.hideMoveDialog() }
+        )
+    }
+}
+
+@Composable
+private fun MoveNoteDialog(
+    notebooks: List<Notebook>,
+    selectedNotebook: Notebook?,
+    sections: List<Section>,
+    onSelectNotebook: (Notebook) -> Unit,
+    onConfirm: (sectionId: Long) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selectedSection by remember { mutableStateOf<Section?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Mover nota a...") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Cuaderno", style = MaterialTheme.typography.labelMedium)
+                notebooks.forEach { notebook ->
+                    val selected = notebook.id == selectedNotebook?.id
+                    FilterChip(
+                        selected = selected,
+                        onClick  = {
+                            selectedSection = null
+                            onSelectNotebook(notebook)
+                        },
+                        label    = { Text(notebook.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (selectedNotebook != null) {
+                    Spacer(Modifier.height(4.dp))
+                    Text("Sección", style = MaterialTheme.typography.labelMedium)
+                    if (sections.isEmpty()) {
+                        Text(
+                            "Este cuaderno no tiene secciones",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        sections.forEach { section ->
+                            val selected = section.id == selectedSection?.id
+                            FilterChip(
+                                selected = selected,
+                                onClick  = { selectedSection = section },
+                                label    = { Text(section.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick  = { selectedSection?.let { onConfirm(it.id) } },
+                enabled  = selectedSection != null
+            ) { Text("Mover") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
 }
 
 @Composable
@@ -219,7 +296,8 @@ private fun SubSectionCard(
 private fun NoteCard(
     note:     Note,
     onClick:  () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onMove:   () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -265,6 +343,11 @@ private fun NoteCard(
                     expanded         = showMenu,
                     onDismissRequest = { showMenu = false }
                 ) {
+                    DropdownMenuItem(
+                        text        = { Text("Mover a...") },
+                        leadingIcon = { Icon(Icons.Default.DriveFileMove, contentDescription = null) },
+                        onClick     = { showMenu = false; onMove() }
+                    )
                     DropdownMenuItem(
                         text        = { Text("Eliminar") },
                         leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },

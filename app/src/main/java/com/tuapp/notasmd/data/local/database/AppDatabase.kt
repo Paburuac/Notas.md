@@ -9,13 +9,22 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.tuapp.notasmd.data.local.dao.NotebookDao
 import com.tuapp.notasmd.data.local.dao.NoteDao
 import com.tuapp.notasmd.data.local.dao.SectionDao
+import com.tuapp.notasmd.data.local.dao.AlarmDao
+import com.tuapp.notasmd.data.local.dao.HabitDao
+import com.tuapp.notasmd.data.local.dao.TaskCategoryDao
+import com.tuapp.notasmd.data.local.dao.TaskDao
+import com.tuapp.notasmd.data.local.entity.Alarm
+import com.tuapp.notasmd.data.local.entity.Habit
+import com.tuapp.notasmd.data.local.entity.HabitEntry
 import com.tuapp.notasmd.data.local.entity.Notebook
 import com.tuapp.notasmd.data.local.entity.Note
 import com.tuapp.notasmd.data.local.entity.Section
+import com.tuapp.notasmd.data.local.entity.Task
+import com.tuapp.notasmd.data.local.entity.TaskCategory
 
 @Database(
-    entities    = [Notebook::class, Section::class, Note::class],
-    version     = 2,
+    entities    = [Notebook::class, Section::class, Note::class, TaskCategory::class, Task::class, Alarm::class, Habit::class, HabitEntry::class],
+    version     = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -23,6 +32,10 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun notebookDao(): NotebookDao
     abstract fun sectionDao(): SectionDao
     abstract fun noteDao(): NoteDao
+    abstract fun taskCategoryDao(): TaskCategoryDao
+    abstract fun taskDao(): TaskDao
+    abstract fun alarmDao(): AlarmDao
+    abstract fun habitDao(): HabitDao
 
     companion object {
         @Volatile
@@ -35,6 +48,72 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS habits (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        name TEXT NOT NULL,
+                        color TEXT NOT NULL
+                    )
+                """.trimIndent())
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS habit_entries (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        habitId INTEGER NOT NULL,
+                        date TEXT NOT NULL,
+                        FOREIGN KEY(habitId) REFERENCES habits(id) ON DELETE CASCADE
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_habit_entries_habitId ON habit_entries(habitId)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_habit_entries_habitId_date ON habit_entries(habitId, date)")
+            }
+        }
+
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS alarms (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        hour INTEGER NOT NULL,
+                        minute INTEGER NOT NULL,
+                        label TEXT NOT NULL DEFAULT '',
+                        isEnabled INTEGER NOT NULL DEFAULT 1,
+                        repeatDays TEXT NOT NULL DEFAULT ''
+                    )
+                """.trimIndent())
+            }
+        }
+
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS task_categories (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        name TEXT NOT NULL,
+                        color TEXT NOT NULL,
+                        `order` INTEGER NOT NULL DEFAULT 0
+                    )
+                """.trimIndent())
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS tasks (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        categoryId INTEGER,
+                        title TEXT NOT NULL,
+                        isCompleted INTEGER NOT NULL DEFAULT 0,
+                        isRecurring INTEGER NOT NULL DEFAULT 0,
+                        recurUnit TEXT NOT NULL DEFAULT 'DAYS',
+                        recurAmount INTEGER NOT NULL DEFAULT 1,
+                        nextDueAt INTEGER,
+                        createdAt INTEGER NOT NULL,
+                        updatedAt INTEGER NOT NULL,
+                        FOREIGN KEY(categoryId) REFERENCES task_categories(id) ON DELETE SET NULL
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_tasks_categoryId ON tasks(categoryId)")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 Room.databaseBuilder(
@@ -42,7 +121,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "notasmd_db"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                     .also { INSTANCE = it }
             }

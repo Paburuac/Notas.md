@@ -19,12 +19,14 @@ import com.tuapp.notasmd.ui.components.DeleteConfirmDialog
 import com.tuapp.notasmd.ui.components.NameColorDialog
 import com.tuapp.notasmd.ui.components.toFormattedDate
 import com.tuapp.notasmd.viewmodel.NotebookViewModel
+import com.tuapp.notasmd.viewmodel.RecentNoteItem
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotebooksScreen(
     viewModel: NotebookViewModel,
     onNavigateToSections: (notebookId: Long) -> Unit,
+    onNavigateToEditor: (sectionId: Long, noteId: Long) -> Unit,
     onNavigateToSettings: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -54,7 +56,10 @@ fun NotebooksScreen(
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
 
-        if (uiState.notebooks.isEmpty()) {
+        val hasRecents   = uiState.recentNotes.isNotEmpty()
+        val hasNotebooks = uiState.notebooks.isNotEmpty()
+
+        if (!hasNotebooks && !hasRecents) {
             Box(
                 modifier          = Modifier.fillMaxSize().padding(padding),
                 contentAlignment  = Alignment.Center
@@ -79,19 +84,46 @@ fun NotebooksScreen(
                 contentPadding  = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(uiState.notebooks, key = { it.id }) { notebook ->
-                    NotebookCard(
-                        notebook = notebook,
-                        onClick  = { onNavigateToSections(notebook.id) },
-                        onEdit   = { viewModel.showEditDialog(notebook) },
-                        onDelete = { viewModel.showDeleteDialog(notebook) }
-                    )
+                if (hasRecents) {
+                    item {
+                        Text(
+                            text     = "Recientes",
+                            style    = MaterialTheme.typography.labelLarge,
+                            color    = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                    }
+                    items(uiState.recentNotes, key = { "recent_${it.note.id}" }) { item ->
+                        RecentNoteCard(
+                            item    = item,
+                            onClick = { onNavigateToEditor(item.note.sectionId, item.note.id) }
+                        )
+                    }
+                    item { Spacer(Modifier.height(4.dp)) }
+                }
+
+                if (hasNotebooks) {
+                    item {
+                        Text(
+                            text     = "Cuadernos",
+                            style    = MaterialTheme.typography.labelLarge,
+                            color    = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                    }
+                    items(uiState.notebooks, key = { it.id }) { notebook ->
+                        NotebookCard(
+                            notebook = notebook,
+                            onClick  = { onNavigateToSections(notebook.id) },
+                            onEdit   = { viewModel.showEditDialog(notebook) },
+                            onDelete = { viewModel.showDeleteDialog(notebook) }
+                        )
+                    }
                 }
             }
         }
     }
 
-    // Diálogo crear
     if (uiState.showCreateDialog) {
         NameColorDialog(
             title     = "Nuevo cuaderno",
@@ -100,7 +132,6 @@ fun NotebooksScreen(
         )
     }
 
-    // Diálogo editar
     uiState.notebookToEdit?.let { notebook ->
         NameColorDialog(
             title        = "Editar cuaderno",
@@ -111,13 +142,53 @@ fun NotebooksScreen(
         )
     }
 
-    // Diálogo eliminar
     uiState.notebookToDelete?.let { notebook ->
         DeleteConfirmDialog(
             itemName  = notebook.name,
             onConfirm = { viewModel.deleteNotebook(notebook) },
             onDismiss = { viewModel.hideDeleteDialog() }
         )
+    }
+}
+
+@Composable
+private fun RecentNoteCard(
+    item: RecentNoteItem,
+    onClick: () -> Unit
+) {
+    Card(
+        onClick   = onClick,
+        modifier  = Modifier.fillMaxWidth(),
+        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier          = Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector        = Icons.Default.Article,
+                contentDescription = null,
+                tint               = MaterialTheme.colorScheme.primary,
+                modifier           = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text     = item.note.title.ifBlank { "Sin título" },
+                    style    = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text  = "${item.notebookName} › ${item.sectionName}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
     }
 }
 
@@ -143,7 +214,6 @@ private fun NotebookCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(modifier = Modifier.height(IntrinsicSize.Min)) {
-            // Franja de color lateral
             Box(
                 modifier = Modifier
                     .width(8.dp)

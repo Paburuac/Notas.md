@@ -13,6 +13,9 @@ interface SectionDao {
     @Query("SELECT * FROM sections WHERE parentSectionId = :parentSectionId ORDER BY updatedAt DESC")
     fun getSubSections(parentSectionId: Long): Flow<List<Section>>
 
+    @Query("SELECT * FROM sections WHERE notebookId = :notebookId AND parentSectionId IS NULL ORDER BY updatedAt DESC")
+    suspend fun getSectionsByNotebookOnce(notebookId: Long): List<Section>
+
     @Query("SELECT * FROM sections WHERE id = :id")
     suspend fun getSectionById(id: Long): Section?
 
