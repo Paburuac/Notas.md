@@ -26,4 +26,16 @@ class NoteRepository(private val noteDao: NoteDao) {
 
     suspend fun getNotesByIds(ids: List<Long>): List<Note> =
         noteDao.getNotesByIds(ids)
+
+    fun searchNotes(query: String): Flow<List<Note>> =
+        noteDao.searchNotes(query)
+
+    fun getAllNotes(): Flow<List<Note>> =
+        noteDao.getAllNotes()
+
+    suspend fun searchNotesByTitle(query: String): List<Note> =
+        noteDao.searchNotesByTitle(query)
+
+    suspend fun getNotesBySectionOnce(sectionId: Long): List<Note> =
+        noteDao.getNotesBySectionOnce(sectionId)
 }

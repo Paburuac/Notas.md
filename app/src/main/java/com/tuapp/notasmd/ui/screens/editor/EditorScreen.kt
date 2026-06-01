@@ -35,6 +35,7 @@ import java.util.Locale
 import androidx.core.content.res.ResourcesCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tuapp.notasmd.R
+import com.tuapp.notasmd.data.local.entity.Note
 import com.tuapp.notasmd.ui.components.ColorPicker
 import com.tuapp.notasmd.ui.components.MarkdownToolbar
 import com.tuapp.notasmd.ui.components.toFormattedDate
@@ -47,7 +48,8 @@ import io.noties.markwon.html.HtmlPlugin
 @Composable
 fun EditorScreen(
     viewModel: EditorViewModel,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToNote: (sectionId: Long, noteId: Long) -> Unit = { _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -240,9 +242,40 @@ fun EditorScreen(
                         .verticalScroll(rememberScrollState())
                         .padding(16.dp)
                 ) {
-                    MarkdownPreview(content = uiState.content.split('\n').joinToString("\n") { stripLineTimestamp(it) })
+                    MarkdownPreview(
+                        content          = uiState.content.split('\n').joinToString("\n") { stripLineTimestamp(it) },
+                        onNavigateToNote = onNavigateToNote
+                    )
                 }
             } else {
+                // Sugerencias de enlace — aparecen entre la toolbar y el contenido
+                if (uiState.showLinkPicker && uiState.linkSuggestions.isNotEmpty()) {
+                    Card(
+                        modifier  = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        uiState.linkSuggestions.forEach { note ->
+                            TextButton(
+                                onClick  = {
+                                    contentField = insertNoteLink(contentField, note)
+                                    viewModel.onContentChange(contentField.text)
+                                    viewModel.dismissLinkPicker()
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text  = note.title.ifBlank { "Sin título" },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -255,6 +288,20 @@ fun EditorScreen(
                             val processed = autocontinueBulletList(contentField, newValue)
                             contentField = processed
                             viewModel.onContentChange(processed.text)
+                            // Detectar (( para autocompletado de enlace
+                            val cursor       = processed.selection.start.coerceAtMost(processed.text.length)
+                            val beforeCursor = processed.text.substring(0, cursor)
+                            val lastOpen     = beforeCursor.lastIndexOf("((")
+                            if (lastOpen != -1) {
+                                val afterOpen = beforeCursor.substring(lastOpen + 2)
+                                if (!afterOpen.contains(")")) {
+                                    viewModel.onLinkQueryChange(afterOpen)
+                                } else {
+                                    viewModel.dismissLinkPicker()
+                                }
+                            } else {
+                                viewModel.dismissLinkPicker()
+                            }
                         },
                         textStyle = MaterialTheme.typography.bodyLarge.copy(
                             color = MaterialTheme.colorScheme.onBackground
@@ -267,7 +314,8 @@ fun EditorScreen(
                             )
                         },
                         visualTransformation = MarkdownVisualTransformation(
-                            timestampColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            timestampColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            linkColor      = MaterialTheme.colorScheme.primary
                         ),
                         colors   = transparentTextFieldColors(),
                         modifier = Modifier
@@ -441,13 +489,26 @@ private fun dedentLine(field: TextFieldValue): TextFieldValue {
     return TextFieldValue(text = newText, selection = TextRange(selStart, (selEnd - removed).coerceAtLeast(selStart)))
 }
 
+private fun insertNoteLink(field: TextFieldValue, note: Note): TextFieldValue {
+    val text         = field.text
+    val cursor       = field.selection.start.coerceAtMost(text.length)
+    val beforeCursor = text.substring(0, cursor)
+    val lastOpen     = beforeCursor.lastIndexOf("((")
+    if (lastOpen == -1) return field
+    val link    = "((${note.id}|${note.title.ifBlank { "Sin título" }}))"
+    val newText = text.substring(0, lastOpen) + link + text.substring(cursor)
+    return TextFieldValue(text = newText, selection = androidx.compose.ui.text.TextRange(lastOpen + link.length))
+}
+
 private fun stripLineTimestamp(line: String): String =
     line.replace(Regex(""" \[\d{2}:\d{2}]$"""), "")
 
 private class MarkdownVisualTransformation(
-    private val timestampColor: Color = Color.Gray
+    private val timestampColor: Color = Color.Gray,
+    private val linkColor:      Color = Color.Blue
 ) : VisualTransformation {
     private val timestampRegex = Regex(""" \[\d{2}:\d{2}]""")
+    private val noteLinkRegex  = Regex("""\(\(\d+\|[^)]+\)\)""")
 
     override fun filter(text: AnnotatedString): TransformedText {
         val str    = text.text
@@ -467,6 +528,14 @@ private class MarkdownVisualTransformation(
         timestampRegex.findAll(str).forEach { m ->
             spans.add(AnnotatedString.Range(
                 SpanStyle(fontSize = 10.sp, color = timestampColor),
+                m.range.first, m.range.last + 1
+            ))
+        }
+
+        // Links a notas ((id|título)) → color primario + negrita
+        noteLinkRegex.findAll(str).forEach { m ->
+            spans.add(AnnotatedString.Range(
+                SpanStyle(color = linkColor, fontWeight = FontWeight.SemiBold),
                 m.range.first, m.range.last + 1
             ))
         }
@@ -513,13 +582,25 @@ private fun transparentTextFieldColors() = TextFieldDefaults.colors(
     unfocusedIndicatorColor = Color.Transparent,
 )
 
+private val NOTE_LINK_PREVIEW_REGEX = Regex("""\(\((\d+)\|([^)]+)\)\)""")
+
+private fun preprocessLinksForPreview(content: String): String =
+    NOTE_LINK_PREVIEW_REGEX.replace(content) { mr ->
+        val id    = mr.groupValues[1]
+        val title = mr.groupValues[2]
+        "[$title](note://$id)"
+    }
+
 @Composable
 private fun MarkdownPreview(
-    content:  String,
-    modifier: Modifier = Modifier
+    content:          String,
+    modifier:         Modifier = Modifier,
+    onNavigateToNote: (sectionId: Long, noteId: Long) -> Unit = { _, _ -> }
 ) {
-    val context   = LocalContext.current
-    val textColor = MaterialTheme.colorScheme.onBackground.toArgb()
+    val context      = LocalContext.current
+    val textColor    = MaterialTheme.colorScheme.onBackground.toArgb()
+    val linkArgb     = MaterialTheme.colorScheme.primary.toArgb()
+    val processed    = remember(content) { preprocessLinksForPreview(content) }
 
     val markwon = remember {
         Markwon.builder(context)
@@ -543,7 +624,35 @@ private fun MarkdownPreview(
         },
         update = { textView ->
             textView.setTextColor(textColor)
-            markwon.setMarkdown(textView, content)
+            markwon.setMarkdown(textView, processed)
+            textView.movementMethod = android.text.method.LinkMovementMethod.getInstance()
+            // Interceptar links note:// y reemplazarlos con ClickableSpan
+            textView.post {
+                val spannable = textView.text as? android.text.Spannable ?: return@post
+                val urlSpans  = spannable.getSpans(0, spannable.length, android.text.style.URLSpan::class.java)
+                urlSpans.forEach { span ->
+                    if (span.url.startsWith("note://")) {
+                        val noteId = span.url.removePrefix("note://").toLongOrNull() ?: return@forEach
+                        val start  = spannable.getSpanStart(span)
+                        val end    = spannable.getSpanEnd(span)
+                        spannable.removeSpan(span)
+                        spannable.setSpan(
+                            object : android.text.style.ClickableSpan() {
+                                override fun onClick(view: android.view.View) {
+                                    // sectionId se resuelve en el ViewModel al navegar
+                                    onNavigateToNote(-1L, noteId)
+                                }
+                                override fun updateDrawState(ds: android.text.TextPaint) {
+                                    ds.color    = linkArgb
+                                    ds.isUnderlineText = true
+                                }
+                            },
+                            start, end,
+                            android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                        )
+                    }
+                }
+            }
         },
         modifier = modifier.fillMaxWidth()
     )

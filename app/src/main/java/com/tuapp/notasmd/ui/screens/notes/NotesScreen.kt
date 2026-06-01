@@ -1,6 +1,10 @@
 package com.tuapp.notasmd.ui.screens.notes
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,9 +16,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.tuapp.notasmd.NotasMdApp
 import com.tuapp.notasmd.data.local.entity.Note
 import com.tuapp.notasmd.data.local.entity.Notebook
 import com.tuapp.notasmd.data.local.entity.Section
@@ -22,6 +28,7 @@ import com.tuapp.notasmd.ui.components.DeleteConfirmDialog
 import com.tuapp.notasmd.ui.components.NameColorDialog
 import com.tuapp.notasmd.ui.components.toFormattedDate
 import com.tuapp.notasmd.viewmodel.NoteViewModel
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,22 +39,59 @@ fun NotesScreen(
     onNavigateToSubSection: (sectionId: Long) -> Unit,
     onNavigateBack: () -> Unit
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val uiState    by viewModel.uiState.collectAsStateWithLifecycle()
     var fabExpanded by remember { mutableStateOf(false) }
+    val context    = LocalContext.current
+    val app        = context.applicationContext as NotasMdApp
+    val scope      = rememberCoroutineScope()
+
+    val exportSelectedLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        val selected = viewModel.selectedNotes()
+        scope.launch {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)!!.use { app.exportManager.exportNotes(selected, it) }
+            }
+            viewModel.exitSelectionMode()
+        }
+    }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Notas") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
+            if (uiState.isSelectionMode) {
+                TopAppBar(
+                    title = { Text("${uiState.selectedNoteIds.size} seleccionadas") },
+                    navigationIcon = {
+                        IconButton(onClick = { viewModel.exitSelectionMode() }) {
+                            Icon(Icons.Default.Close, contentDescription = "Cancelar selección")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = {
+                            exportSelectedLauncher.launch("notas_seleccionadas.zip")
+                        }) {
+                            Icon(Icons.Default.FileDownload, contentDescription = "Exportar selección")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    )
                 )
-            )
+            } else {
+                TopAppBar(
+                    title = { Text("Notas") },
+                    navigationIcon = {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background
+                    )
+                )
+            }
         },
         floatingActionButton = {
             Column(
@@ -143,10 +187,16 @@ fun NotesScreen(
                 }
                 items(uiState.notes, key = { "note_${it.id}" }) { note ->
                     NoteCard(
-                        note     = note,
-                        onClick  = { onNavigateToEditor(sectionId, note.id) },
-                        onDelete = { viewModel.showDeleteDialog(note) },
-                        onMove   = { viewModel.showMoveDialog(note) }
+                        note        = note,
+                        isSelected  = note.id in uiState.selectedNoteIds,
+                        selectionMode = uiState.isSelectionMode,
+                        onClick     = {
+                            if (uiState.isSelectionMode) viewModel.toggleNoteSelection(note.id)
+                            else onNavigateToEditor(sectionId, note.id)
+                        },
+                        onLongClick = { viewModel.enterSelectionMode(note.id) },
+                        onDelete    = { viewModel.showDeleteDialog(note) },
+                        onMove      = { viewModel.showMoveDialog(note) }
                     )
                 }
             }
@@ -292,25 +342,40 @@ private fun SubSectionCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun NoteCard(
-    note:     Note,
-    onClick:  () -> Unit,
-    onDelete: () -> Unit,
-    onMove:   () -> Unit
+    note:          Note,
+    isSelected:    Boolean,
+    selectionMode: Boolean,
+    onClick:       () -> Unit,
+    onLongClick:   () -> Unit,
+    onDelete:      () -> Unit,
+    onMove:        () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
     Card(
-        onClick   = onClick,
-        modifier  = Modifier.fillMaxWidth(),
-        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier  = Modifier
+            .fillMaxWidth()
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        colors    = CardDefaults.cardColors(
+            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                             else MaterialTheme.colorScheme.surface
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
             modifier          = Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.Top
         ) {
+            if (selectionMode) {
+                Checkbox(
+                    checked         = isSelected,
+                    onCheckedChange = { onClick() },
+                    modifier        = Modifier.padding(end = 8.dp)
+                )
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text     = note.title.ifBlank { "Sin título" },
@@ -335,24 +400,26 @@ private fun NoteCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Box {
-                IconButton(onClick = { showMenu = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "Opciones")
-                }
-                DropdownMenu(
-                    expanded         = showMenu,
-                    onDismissRequest = { showMenu = false }
-                ) {
-                    DropdownMenuItem(
-                        text        = { Text("Mover a...") },
-                        leadingIcon = { Icon(Icons.Default.DriveFileMove, contentDescription = null) },
-                        onClick     = { showMenu = false; onMove() }
-                    )
-                    DropdownMenuItem(
-                        text        = { Text("Eliminar") },
-                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
-                        onClick     = { showMenu = false; onDelete() }
-                    )
+            if (!selectionMode) {
+                Box {
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Opciones")
+                    }
+                    DropdownMenu(
+                        expanded         = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text        = { Text("Mover a...") },
+                            leadingIcon = { Icon(Icons.Default.DriveFileMove, contentDescription = null) },
+                            onClick     = { showMenu = false; onMove() }
+                        )
+                        DropdownMenuItem(
+                            text        = { Text("Eliminar") },
+                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                            onClick     = { showMenu = false; onDelete() }
+                        )
+                    }
                 }
             }
         }

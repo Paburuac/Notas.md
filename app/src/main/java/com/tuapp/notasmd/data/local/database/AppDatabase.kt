@@ -11,6 +11,7 @@ import com.tuapp.notasmd.data.local.dao.NoteDao
 import com.tuapp.notasmd.data.local.dao.SectionDao
 import com.tuapp.notasmd.data.local.dao.AlarmDao
 import com.tuapp.notasmd.data.local.dao.HabitDao
+import com.tuapp.notasmd.data.local.dao.TagDao
 import com.tuapp.notasmd.data.local.dao.TaskCategoryDao
 import com.tuapp.notasmd.data.local.dao.TaskDao
 import com.tuapp.notasmd.data.local.entity.Alarm
@@ -18,13 +19,15 @@ import com.tuapp.notasmd.data.local.entity.Habit
 import com.tuapp.notasmd.data.local.entity.HabitEntry
 import com.tuapp.notasmd.data.local.entity.Notebook
 import com.tuapp.notasmd.data.local.entity.Note
+import com.tuapp.notasmd.data.local.entity.NoteTag
 import com.tuapp.notasmd.data.local.entity.Section
+import com.tuapp.notasmd.data.local.entity.Tag
 import com.tuapp.notasmd.data.local.entity.Task
 import com.tuapp.notasmd.data.local.entity.TaskCategory
 
 @Database(
-    entities    = [Notebook::class, Section::class, Note::class, TaskCategory::class, Task::class, Alarm::class, Habit::class, HabitEntry::class],
-    version     = 5,
+    entities    = [Notebook::class, Section::class, Note::class, TaskCategory::class, Task::class, Alarm::class, Habit::class, HabitEntry::class, Tag::class, NoteTag::class],
+    version     = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -36,6 +39,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun taskDao(): TaskDao
     abstract fun alarmDao(): AlarmDao
     abstract fun habitDao(): HabitDao
+    abstract fun tagDao(): TagDao
 
     companion object {
         @Volatile
@@ -45,6 +49,29 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE sections ADD COLUMN parentSectionId INTEGER")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_sections_parentSectionId ON sections(parentSectionId)")
+            }
+        }
+
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS tags (
+                        id   INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        name TEXT NOT NULL
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_tags_name ON tags(name)")
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS note_tags (
+                        noteId INTEGER NOT NULL,
+                        tagId  INTEGER NOT NULL,
+                        PRIMARY KEY(noteId, tagId),
+                        FOREIGN KEY(noteId) REFERENCES notes(id)  ON DELETE CASCADE,
+                        FOREIGN KEY(tagId)  REFERENCES tags(id)   ON DELETE CASCADE
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_note_tags_noteId ON note_tags(noteId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_note_tags_tagId  ON note_tags(tagId)")
             }
         }
 
@@ -121,7 +148,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "notasmd_db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .build()
                     .also { INSTANCE = it }
             }

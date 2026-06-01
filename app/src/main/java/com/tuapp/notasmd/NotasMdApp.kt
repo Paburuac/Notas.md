@@ -3,6 +3,8 @@ package com.tuapp.notasmd
 import android.app.Application
 import com.tuapp.notasmd.data.local.database.AppDatabase
 import com.tuapp.notasmd.data.repository.AlarmRepository
+import com.tuapp.notasmd.data.repository.TagRepository
+import com.tuapp.notasmd.export.ExportManager
 import com.tuapp.notasmd.data.repository.HabitRepository
 import com.tuapp.notasmd.data.repository.NoteRepository
 import com.tuapp.notasmd.data.repository.NotebookRepository
@@ -23,4 +25,6 @@ class NotasMdApp : Application() {
     val taskRepository         by lazy { TaskRepository(database.taskDao()) }
     val alarmRepository        by lazy { AlarmRepository(database.alarmDao()) }
     val habitRepository        by lazy { HabitRepository(database.habitDao()) }
+    val tagRepository          by lazy { TagRepository(database.tagDao()) }
+    val exportManager          by lazy { ExportManager(notebookRepository, sectionRepository, noteRepository) }
 }

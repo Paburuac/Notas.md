@@ -27,11 +27,13 @@ import com.tuapp.notasmd.ui.screens.checklist.ChecklistScreen
 import com.tuapp.notasmd.ui.screens.clock.ClockScreen
 import com.tuapp.notasmd.ui.screens.editor.EditorScreen
 import com.tuapp.notasmd.ui.screens.notebooks.NotebooksScreen
+import com.tuapp.notasmd.ui.screens.search.SearchScreen
 import com.tuapp.notasmd.ui.screens.notes.NotesScreen
 import com.tuapp.notasmd.ui.screens.sections.SectionsScreen
 import com.tuapp.notasmd.ui.screens.settings.SettingsScreen
 import com.tuapp.notasmd.viewmodel.ChecklistViewModel
 import com.tuapp.notasmd.viewmodel.CalendarViewModel
+import com.tuapp.notasmd.viewmodel.SearchViewModel
 import com.tuapp.notasmd.viewmodel.ClockViewModel
 import com.tuapp.notasmd.viewmodel.EditorViewModel
 import com.tuapp.notasmd.viewmodel.NotebookViewModel
@@ -87,6 +89,9 @@ fun AppNavigation() {
                     },
                     onNavigateToSettings = {
                         navController.navigate(Screen.Settings.route)
+                    },
+                    onNavigateToSearch = {
+                        navController.navigate(Screen.Search.route)
                     }
                 )
             }
@@ -141,11 +146,18 @@ fun AppNavigation() {
                 val sectionId = backStack.arguments?.getLong("sectionId") ?: return@composable
                 val noteId    = backStack.arguments?.getLong("noteId") ?: -1L
                 val viewModel: EditorViewModel = viewModel(
-                    factory = EditorViewModel.factory(app.noteRepository, sectionId, noteId)
+                    factory = EditorViewModel.factory(app.noteRepository, app.tagRepository, sectionId, noteId)
                 )
                 EditorScreen(
-                    viewModel      = viewModel,
-                    onNavigateBack = { navController.popBackStack() }
+                    viewModel        = viewModel,
+                    onNavigateBack   = { navController.popBackStack() },
+                    onNavigateToNote = { _, noteId ->
+                        scope.launch {
+                            val note = app.noteRepository.getNoteById(noteId) ?: return@launch
+                            app.recentNotesRepository.registerOpen(noteId)
+                            navController.navigate(Screen.Editor.createRoute(note.sectionId, noteId))
+                        }
+                    }
                 )
             }
 
@@ -184,6 +196,20 @@ fun AppNavigation() {
                 CalendarScreen(
                     viewModel           = viewModel,
                     onNavigateToHabits  = { navController.navigate(Screen.Habits.route) }
+                )
+            }
+
+            composable(Screen.Search.route) {
+                val viewModel: SearchViewModel = viewModel(
+                    factory = SearchViewModel.factory(app.noteRepository, app.tagRepository)
+                )
+                SearchScreen(
+                    viewModel        = viewModel,
+                    onNavigateToNote = { sectionId, noteId ->
+                        scope.launch { app.recentNotesRepository.registerOpen(noteId) }
+                        navController.navigate(Screen.Editor.createRoute(sectionId, noteId))
+                    },
+                    onNavigateBack = { navController.popBackStack() }
                 )
             }
 

@@ -26,4 +26,6 @@ sealed class Screen(val route: String) {
     object Calendar : Screen("calendar")
 
     object Habits : Screen("habits")
+
+    object Search : Screen("search")
 }

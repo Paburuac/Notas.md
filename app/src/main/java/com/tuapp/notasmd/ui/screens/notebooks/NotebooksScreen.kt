@@ -1,5 +1,7 @@
 package com.tuapp.notasmd.ui.screens.notebooks
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,15 +13,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.tuapp.notasmd.NotasMdApp
 import com.tuapp.notasmd.data.local.entity.Notebook
 import com.tuapp.notasmd.ui.components.DeleteConfirmDialog
 import com.tuapp.notasmd.ui.components.NameColorDialog
 import com.tuapp.notasmd.ui.components.toFormattedDate
 import com.tuapp.notasmd.viewmodel.NotebookViewModel
 import com.tuapp.notasmd.viewmodel.RecentNoteItem
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -27,15 +32,50 @@ fun NotebooksScreen(
     viewModel: NotebookViewModel,
     onNavigateToSections: (notebookId: Long) -> Unit,
     onNavigateToEditor: (sectionId: Long, noteId: Long) -> Unit,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    onNavigateToSearch: () -> Unit = {}
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val uiState  by viewModel.uiState.collectAsStateWithLifecycle()
+    val context  = LocalContext.current
+    val app      = context.applicationContext as NotasMdApp
+    val scope    = rememberCoroutineScope()
+    var notebookToExport by remember { mutableStateOf<Notebook?>(null) }
+    var exportError      by remember { mutableStateOf<String?>(null) }
+
+    val exportAllLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        scope.launch {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)!!.use { app.exportManager.exportAll(it) }
+            }.onFailure { exportError = "Error al exportar: ${it.message}" }
+        }
+    }
+
+    val exportNotebookLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        val notebook = notebookToExport ?: return@rememberLauncherForActivityResult
+        scope.launch {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)!!.use { app.exportManager.exportNotebook(notebook, it) }
+            }.onFailure { exportError = "Error al exportar: ${it.message}" }
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title  = { Text("Mis Cuadernos") },
                 actions = {
+                    IconButton(onClick = onNavigateToSearch) {
+                        Icon(Icons.Default.Search, contentDescription = "Buscar")
+                    }
+                    IconButton(onClick = { exportAllLauncher.launch("notas_export.zip") }) {
+                        Icon(Icons.Default.FileDownload, contentDescription = "Exportar todo")
+                    }
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(Icons.Default.Settings, contentDescription = "Ajustes")
                     }
@@ -116,12 +156,25 @@ fun NotebooksScreen(
                             notebook = notebook,
                             onClick  = { onNavigateToSections(notebook.id) },
                             onEdit   = { viewModel.showEditDialog(notebook) },
-                            onDelete = { viewModel.showDeleteDialog(notebook) }
+                            onDelete = { viewModel.showDeleteDialog(notebook) },
+                            onExport = {
+                                notebookToExport = notebook
+                                exportNotebookLauncher.launch("${notebook.name}.zip")
+                            }
                         )
                     }
                 }
             }
         }
+    }
+
+    exportError?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { exportError = null },
+            title            = { Text("Error") },
+            text             = { Text(msg) },
+            confirmButton    = { TextButton(onClick = { exportError = null }) { Text("OK") } }
+        )
     }
 
     if (uiState.showCreateDialog) {
@@ -197,7 +250,8 @@ private fun NotebookCard(
     notebook: Notebook,
     onClick:  () -> Unit,
     onEdit:   () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onExport: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
     val accentColor = remember(notebook.color) {
@@ -249,6 +303,11 @@ private fun NotebookCard(
                             text          = { Text("Editar") },
                             leadingIcon   = { Icon(Icons.Default.Edit, contentDescription = null) },
                             onClick       = { showMenu = false; onEdit() }
+                        )
+                        DropdownMenuItem(
+                            text          = { Text("Exportar") },
+                            leadingIcon   = { Icon(Icons.Default.FileDownload, contentDescription = null) },
+                            onClick       = { showMenu = false; onExport() }
                         )
                         DropdownMenuItem(
                             text          = { Text("Eliminar") },

@@ -7,6 +7,8 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.tuapp.notasmd.data.local.entity.Note
 import com.tuapp.notasmd.data.repository.NoteRepository
+import com.tuapp.notasmd.data.repository.TagRepository
+import com.tuapp.notasmd.viewmodel.extractTags
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,18 +16,21 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class EditorUiState(
-    val noteId:        Long    = -1L,
-    val title:         String  = "",
-    val content:       String  = "",
-    val createdAt:     Long    = System.currentTimeMillis(),
-    val updatedAt:     Long    = System.currentTimeMillis(),
-    val isSaved:       Boolean = true,
-    val isPreviewMode: Boolean = false
+    val noteId:          Long        = -1L,
+    val title:           String      = "",
+    val content:         String      = "",
+    val createdAt:       Long        = System.currentTimeMillis(),
+    val updatedAt:       Long        = System.currentTimeMillis(),
+    val isSaved:         Boolean     = true,
+    val isPreviewMode:   Boolean     = false,
+    val linkSuggestions: List<Note>  = emptyList(),
+    val showLinkPicker:  Boolean     = false
 )
 
 class EditorViewModel(
-    private val repository: NoteRepository,
-    private val sectionId:  Long,
+    private val repository:    NoteRepository,
+    private val tagRepository: TagRepository,
+    private val sectionId:     Long,
     private val initialNoteId: Long
 ) : ViewModel() {
 
@@ -60,6 +65,17 @@ class EditorViewModel(
     fun togglePreview() =
         _uiState.update { it.copy(isPreviewMode = !it.isPreviewMode) }
 
+    fun onLinkQueryChange(query: String) {
+        viewModelScope.launch {
+            val results = if (query.isEmpty()) emptyList()
+                          else repository.searchNotesByTitle(query)
+            _uiState.update { it.copy(linkSuggestions = results, showLinkPicker = true) }
+        }
+    }
+
+    fun dismissLinkPicker() =
+        _uiState.update { it.copy(showLinkPicker = false, linkSuggestions = emptyList()) }
+
     fun saveNote() {
         val state = _uiState.value
         // No guardar si no hay cambios o si la nota está completamente vacía
@@ -67,7 +83,8 @@ class EditorViewModel(
         if (state.title.isBlank() && state.content.isBlank()) return
 
         viewModelScope.launch {
-            val now = System.currentTimeMillis()
+            val now  = System.currentTimeMillis()
+            val tags = extractTags(state.content)
             if (state.noteId == -1L) {
                 val newId = repository.insertNote(
                     Note(
@@ -78,6 +95,7 @@ class EditorViewModel(
                         updatedAt       = now
                     )
                 )
+                tagRepository.syncTagsForNote(newId, tags)
                 _uiState.update { it.copy(noteId = newId, updatedAt = now, isSaved = true) }
             } else {
                 repository.updateNote(
@@ -90,6 +108,7 @@ class EditorViewModel(
                         updatedAt       = now
                     )
                 )
+                tagRepository.syncTagsForNote(state.noteId, tags)
                 _uiState.update { it.copy(updatedAt = now, isSaved = true) }
             }
         }
@@ -97,11 +116,12 @@ class EditorViewModel(
 
     companion object {
         fun factory(
-            repository: NoteRepository,
-            sectionId:  Long,
-            noteId:     Long
+            repository:    NoteRepository,
+            tagRepository: TagRepository,
+            sectionId:     Long,
+            noteId:        Long
         ): ViewModelProvider.Factory = viewModelFactory {
-            initializer { EditorViewModel(repository, sectionId, noteId) }
+            initializer { EditorViewModel(repository, tagRepository, sectionId, noteId) }
         }
     }
 }

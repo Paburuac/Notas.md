@@ -27,4 +27,16 @@ interface NoteDao {
 
     @Query("SELECT * FROM notes WHERE id IN (:ids)")
     suspend fun getNotesByIds(ids: List<Long>): List<Note>
+
+    @Query("SELECT * FROM notes WHERE title LIKE '%' || :query || '%' OR contentMarkdown LIKE '%' || :query || '%' ORDER BY updatedAt DESC")
+    fun searchNotes(query: String): Flow<List<Note>>
+
+    @Query("SELECT * FROM notes ORDER BY updatedAt DESC")
+    fun getAllNotes(): Flow<List<Note>>
+
+    @Query("SELECT * FROM notes WHERE title LIKE '%' || :query || '%' ORDER BY updatedAt DESC LIMIT 10")
+    suspend fun searchNotesByTitle(query: String): List<Note>
+
+    @Query("SELECT * FROM notes WHERE sectionId = :sectionId ORDER BY updatedAt DESC")
+    suspend fun getNotesBySectionOnce(sectionId: Long): List<Note>
 }

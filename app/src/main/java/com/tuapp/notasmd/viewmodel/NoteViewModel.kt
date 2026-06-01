@@ -26,7 +26,9 @@ data class NotesUiState(
     val noteToMove: Note?                   = null,
     val moveNotebooks: List<Notebook>       = emptyList(),
     val moveSelectedNotebook: Notebook?     = null,
-    val moveSections: List<Section>         = emptyList()
+    val moveSections: List<Section>         = emptyList(),
+    val isSelectionMode: Boolean            = false,
+    val selectedNoteIds: Set<Long>          = emptySet()
 )
 
 class NoteViewModel(
@@ -110,6 +112,15 @@ class NoteViewModel(
     fun hideDeleteDialog()                    = _uiState.update { it.copy(noteToDelete = null) }
     fun showCreateSubSectionDialog()          = _uiState.update { it.copy(showCreateSubSectionDialog = true) }
     fun hideCreateSubSectionDialog()          = _uiState.update { it.copy(showCreateSubSectionDialog = false) }
+
+    fun enterSelectionMode(noteId: Long)      = _uiState.update { it.copy(isSelectionMode = true, selectedNoteIds = setOf(noteId)) }
+    fun exitSelectionMode()                   = _uiState.update { it.copy(isSelectionMode = false, selectedNoteIds = emptySet()) }
+    fun toggleNoteSelection(noteId: Long)     = _uiState.update {
+        val updated = if (noteId in it.selectedNoteIds) it.selectedNoteIds - noteId
+                      else it.selectedNoteIds + noteId
+        it.copy(selectedNoteIds = updated, isSelectionMode = updated.isNotEmpty())
+    }
+    fun selectedNotes(): List<Note>           = _uiState.value.notes.filter { it.id in _uiState.value.selectedNoteIds }
 
     companion object {
         fun factory(
