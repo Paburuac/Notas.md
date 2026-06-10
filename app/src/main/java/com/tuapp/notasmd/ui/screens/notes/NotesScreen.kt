@@ -187,16 +187,18 @@ fun NotesScreen(
                 }
                 items(uiState.notes, key = { "note_${it.id}" }) { note ->
                     NoteCard(
-                        note        = note,
-                        isSelected  = note.id in uiState.selectedNoteIds,
+                        note          = note,
+                        isSelected    = note.id in uiState.selectedNoteIds,
                         selectionMode = uiState.isSelectionMode,
-                        onClick     = {
+                        onClick       = {
                             if (uiState.isSelectionMode) viewModel.toggleNoteSelection(note.id)
                             else onNavigateToEditor(sectionId, note.id)
                         },
-                        onLongClick = { viewModel.enterSelectionMode(note.id) },
-                        onDelete    = { viewModel.showDeleteDialog(note) },
-                        onMove      = { viewModel.showMoveDialog(note) }
+                        onLongClick   = { viewModel.togglePin(note) },
+                        onDelete      = { viewModel.showDeleteDialog(note) },
+                        onMove        = { viewModel.showMoveDialog(note) },
+                        onSelect      = { viewModel.enterSelectionMode(note.id) },
+                        onTogglePin   = { viewModel.togglePin(note) }
                     )
                 }
             }
@@ -351,7 +353,9 @@ private fun NoteCard(
     onClick:       () -> Unit,
     onLongClick:   () -> Unit,
     onDelete:      () -> Unit,
-    onMove:        () -> Unit
+    onMove:        () -> Unit,
+    onSelect:      () -> Unit,
+    onTogglePin:   () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -377,12 +381,23 @@ private fun NoteCard(
                 )
             }
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text     = note.title.ifBlank { "Sin título" },
-                    style    = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (note.isPinned) {
+                        Icon(
+                            imageVector        = Icons.Default.PushPin,
+                            contentDescription = "Fijada",
+                            tint               = MaterialTheme.colorScheme.primary,
+                            modifier           = Modifier.size(14.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                    }
+                    Text(
+                        text     = note.title.ifBlank { "Sin título" },
+                        style    = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
                 if (note.contentMarkdown.isNotBlank()) {
                     Spacer(Modifier.height(4.dp))
                     Text(
@@ -409,6 +424,16 @@ private fun NoteCard(
                         expanded         = showMenu,
                         onDismissRequest = { showMenu = false }
                     ) {
+                        DropdownMenuItem(
+                            text        = { Text(if (note.isPinned) "Desfijar" else "Fijar") },
+                            leadingIcon = { Icon(Icons.Default.PushPin, contentDescription = null) },
+                            onClick     = { showMenu = false; onTogglePin() }
+                        )
+                        DropdownMenuItem(
+                            text        = { Text("Seleccionar") },
+                            leadingIcon = { Icon(Icons.Default.CheckBox, contentDescription = null) },
+                            onClick     = { showMenu = false; onSelect() }
+                        )
                         DropdownMenuItem(
                             text        = { Text("Mover a...") },
                             leadingIcon = { Icon(Icons.Default.DriveFileMove, contentDescription = null) },

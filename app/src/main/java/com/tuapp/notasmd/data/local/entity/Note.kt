@@ -18,9 +18,10 @@ import androidx.room.PrimaryKey
 data class Note(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    val sectionId: Long,                       // FK → Section.id
+    val sectionId: Long,
     val title: String,
     val contentMarkdown: String,
     val createdAt: Long = System.currentTimeMillis(),
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    val isPinned: Boolean = false
 )

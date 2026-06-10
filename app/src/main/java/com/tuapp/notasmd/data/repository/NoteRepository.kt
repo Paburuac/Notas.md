@@ -38,4 +38,10 @@ class NoteRepository(private val noteDao: NoteDao) {
 
     suspend fun getNotesBySectionOnce(sectionId: Long): List<Note> =
         noteDao.getNotesBySectionOnce(sectionId)
+
+    fun getPinnedNotes(): Flow<List<Note>> =
+        noteDao.getPinnedNotes()
+
+    suspend fun setPinned(noteId: Long, isPinned: Boolean) =
+        noteDao.setPinned(noteId, isPinned)
 }

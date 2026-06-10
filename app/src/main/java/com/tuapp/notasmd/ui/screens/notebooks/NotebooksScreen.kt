@@ -12,7 +12,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -23,7 +22,7 @@ import com.tuapp.notasmd.ui.components.DeleteConfirmDialog
 import com.tuapp.notasmd.ui.components.NameColorDialog
 import com.tuapp.notasmd.ui.components.toFormattedDate
 import com.tuapp.notasmd.viewmodel.NotebookViewModel
-import com.tuapp.notasmd.viewmodel.RecentNoteItem
+import com.tuapp.notasmd.viewmodel.PinnedNoteItem
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -96,10 +95,10 @@ fun NotebooksScreen(
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
 
-        val hasRecents   = uiState.recentNotes.isNotEmpty()
+        val hasPinned    = uiState.pinnedNotes.isNotEmpty()
         val hasNotebooks = uiState.notebooks.isNotEmpty()
 
-        if (!hasNotebooks && !hasRecents) {
+        if (!hasNotebooks && !hasPinned) {
             Box(
                 modifier          = Modifier.fillMaxSize().padding(padding),
                 contentAlignment  = Alignment.Center
@@ -124,17 +123,17 @@ fun NotebooksScreen(
                 contentPadding  = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                if (hasRecents) {
+                if (hasPinned) {
                     item {
                         Text(
-                            text     = "Recientes",
+                            text     = "Fijadas",
                             style    = MaterialTheme.typography.labelLarge,
                             color    = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(bottom = 4.dp)
                         )
                     }
-                    items(uiState.recentNotes, key = { "recent_${it.note.id}" }) { item ->
-                        RecentNoteCard(
+                    items(uiState.pinnedNotes, key = { "pinned_${it.note.id}" }) { item ->
+                        PinnedNoteCard(
                             item    = item,
                             onClick = { onNavigateToEditor(item.note.sectionId, item.note.id) }
                         )
@@ -205,8 +204,8 @@ fun NotebooksScreen(
 }
 
 @Composable
-private fun RecentNoteCard(
-    item: RecentNoteItem,
+private fun PinnedNoteCard(
+    item: PinnedNoteItem,
     onClick: () -> Unit
 ) {
     Card(
@@ -220,10 +219,10 @@ private fun RecentNoteCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                imageVector        = Icons.Default.Article,
+                imageVector        = Icons.Default.PushPin,
                 contentDescription = null,
                 tint               = MaterialTheme.colorScheme.primary,
-                modifier           = Modifier.size(20.dp)
+                modifier           = Modifier.size(18.dp)
             )
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -234,9 +233,9 @@ private fun RecentNoteCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text  = "${item.notebookName} › ${item.sectionName}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text     = "${item.notebookName} › ${item.sectionName}",
+                    style    = MaterialTheme.typography.labelSmall,
+                    color    = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -254,10 +253,7 @@ private fun NotebookCard(
     onExport: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
-    val accentColor = remember(notebook.color) {
-        try { Color(android.graphics.Color.parseColor(notebook.color)) }
-        catch (e: Exception) { Color(0xFF8B6914.toInt()) }
-    }
+    val accentColor = MaterialTheme.colorScheme.primary
 
     Card(
         onClick   = onClick,

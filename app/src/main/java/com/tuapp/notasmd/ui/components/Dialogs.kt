@@ -10,35 +10,27 @@ import androidx.compose.ui.unit.dp
 fun NameColorDialog(
     title: String,
     initialName: String  = "",
-    initialColor: String = "#8B6914",
+    initialColor: String = "#00C8E8",
     onConfirm: (name: String, color: String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var name          by remember { mutableStateOf(initialName) }
-    var selectedColor by remember { mutableStateOf(initialColor) }
+    var name by remember { mutableStateOf(initialName) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text  = {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                OutlinedTextField(
-                    value         = name,
-                    onValueChange = { name = it },
-                    label         = { Text("Nombre") },
-                    singleLine    = true,
-                    modifier      = Modifier.fillMaxWidth()
-                )
-                Text("Color", style = MaterialTheme.typography.labelMedium)
-                ColorPicker(
-                    selectedColor    = selectedColor,
-                    onColorSelected  = { selectedColor = it }
-                )
-            }
+            OutlinedTextField(
+                value         = name,
+                onValueChange = { name = it },
+                label         = { Text("Nombre") },
+                singleLine    = true,
+                modifier      = Modifier.fillMaxWidth()
+            )
         },
         confirmButton = {
             TextButton(
-                onClick  = { if (name.isNotBlank()) onConfirm(name.trim(), selectedColor) },
+                onClick  = { if (name.isNotBlank()) onConfirm(name.trim(), initialColor) },
                 enabled  = name.isNotBlank()
             ) { Text("Guardar") }
         },

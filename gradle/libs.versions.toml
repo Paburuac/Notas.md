@@ -49,6 +49,7 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 markwon-core   = { group = "io.noties.markwon", name = "core", version.ref = "markwon" }
 markwon-html   = { group = "io.noties.markwon", name = "html", version.ref = "markwon" }
 markwon-table  = { group = "io.noties.markwon", name = "ext-tables", version.ref = "markwon" }
+markwon-editor = { group = "io.noties.markwon", name = "editor", version.ref = "markwon" }
 
 androidx-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workmanager" }

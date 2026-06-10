@@ -22,7 +22,7 @@ data class EditorUiState(
     val createdAt:       Long        = System.currentTimeMillis(),
     val updatedAt:       Long        = System.currentTimeMillis(),
     val isSaved:         Boolean     = true,
-    val isPreviewMode:   Boolean     = false,
+    val isPinned:        Boolean     = false,
     val linkSuggestions: List<Note>  = emptyList(),
     val showLinkPicker:  Boolean     = false
 )
@@ -48,6 +48,7 @@ class EditorViewModel(
                             content   = note.contentMarkdown,
                             createdAt = note.createdAt,
                             updatedAt = note.updatedAt,
+                            isPinned  = note.isPinned,
                             isSaved   = true
                         )
                     }
@@ -62,8 +63,15 @@ class EditorViewModel(
     fun onContentChange(newContent: String) =
         _uiState.update { it.copy(content = newContent, isSaved = false) }
 
-    fun togglePreview() =
-        _uiState.update { it.copy(isPreviewMode = !it.isPreviewMode) }
+    fun togglePin() {
+        val state = _uiState.value
+        if (state.noteId == -1L) return
+        viewModelScope.launch {
+            val newPinned = !state.isPinned
+            repository.setPinned(state.noteId, newPinned)
+            _uiState.update { it.copy(isPinned = newPinned) }
+        }
+    }
 
     fun onLinkQueryChange(query: String) {
         viewModelScope.launch {
@@ -105,7 +113,8 @@ class EditorViewModel(
                         title           = state.title.ifBlank { "Sin título" },
                         contentMarkdown = state.content,
                         createdAt       = state.createdAt,
-                        updatedAt       = now
+                        updatedAt       = now,
+                        isPinned        = state.isPinned
                     )
                 )
                 tagRepository.syncTagsForNote(state.noteId, tags)

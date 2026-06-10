@@ -10,7 +10,6 @@ import com.tuapp.notasmd.data.local.entity.Note
 import com.tuapp.notasmd.data.local.entity.Section
 import com.tuapp.notasmd.data.repository.NotebookRepository
 import com.tuapp.notasmd.data.repository.NoteRepository
-import com.tuapp.notasmd.data.repository.RecentNotesRepository
 import com.tuapp.notasmd.data.repository.SectionRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,7 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-data class RecentNoteItem(
+data class PinnedNoteItem(
     val note: Note,
     val sectionName: String,
     val notebookName: String
@@ -26,7 +25,7 @@ data class RecentNoteItem(
 
 data class NotebooksUiState(
     val notebooks: List<Notebook>           = emptyList(),
-    val recentNotes: List<RecentNoteItem>   = emptyList(),
+    val pinnedNotes: List<PinnedNoteItem>   = emptyList(),
     val showCreateDialog: Boolean           = false,
     val notebookToEdit: Notebook?           = null,
     val notebookToDelete: Notebook?         = null
@@ -35,8 +34,7 @@ data class NotebooksUiState(
 class NotebookViewModel(
     private val repository: NotebookRepository,
     private val noteRepository: NoteRepository,
-    private val sectionRepository: SectionRepository,
-    private val recentNotesRepository: RecentNotesRepository
+    private val sectionRepository: SectionRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(NotebooksUiState())
@@ -49,19 +47,13 @@ class NotebookViewModel(
             }
         }
         viewModelScope.launch {
-            recentNotesRepository.recentNoteIds.collect { ids ->
-                if (ids.isEmpty()) {
-                    _uiState.update { it.copy(recentNotes = emptyList()) }
-                    return@collect
-                }
-                val notes = noteRepository.getNotesByIds(ids)
-                val orderedNotes = ids.mapNotNull { id -> notes.find { it.id == id } }
-                val items = orderedNotes.mapNotNull { note ->
+            noteRepository.getPinnedNotes().collect { notes ->
+                val items = notes.mapNotNull { note ->
                     val section  = sectionRepository.getSectionById(note.sectionId) ?: return@mapNotNull null
                     val notebook = repository.getNotebookById(section.notebookId) ?: return@mapNotNull null
-                    RecentNoteItem(note, section.name, notebook.name)
+                    PinnedNoteItem(note, section.name, notebook.name)
                 }
-                _uiState.update { it.copy(recentNotes = items) }
+                _uiState.update { it.copy(pinnedNotes = items) }
             }
         }
     }
@@ -102,11 +94,10 @@ class NotebookViewModel(
         fun factory(
             repository: NotebookRepository,
             noteRepository: NoteRepository,
-            sectionRepository: SectionRepository,
-            recentNotesRepository: RecentNotesRepository
+            sectionRepository: SectionRepository
         ): ViewModelProvider.Factory =
             viewModelFactory {
-                initializer { NotebookViewModel(repository, noteRepository, sectionRepository, recentNotesRepository) }
+                initializer { NotebookViewModel(repository, noteRepository, sectionRepository) }
             }
     }
 }

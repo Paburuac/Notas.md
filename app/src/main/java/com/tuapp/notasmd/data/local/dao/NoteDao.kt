@@ -39,4 +39,10 @@ interface NoteDao {
 
     @Query("SELECT * FROM notes WHERE sectionId = :sectionId ORDER BY updatedAt DESC")
     suspend fun getNotesBySectionOnce(sectionId: Long): List<Note>
+
+    @Query("SELECT * FROM notes WHERE isPinned = 1 ORDER BY updatedAt DESC")
+    fun getPinnedNotes(): Flow<List<Note>>
+
+    @Query("UPDATE notes SET isPinned = :isPinned WHERE id = :noteId")
+    suspend fun setPinned(noteId: Long, isPinned: Boolean)
 }

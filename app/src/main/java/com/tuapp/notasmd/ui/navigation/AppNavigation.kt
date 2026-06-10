@@ -72,10 +72,9 @@ fun AppNavigation() {
             composable(Screen.Notebooks.route) {
                 val viewModel: NotebookViewModel = viewModel(
                     factory = NotebookViewModel.factory(
-                        repository            = app.notebookRepository,
-                        noteRepository        = app.noteRepository,
-                        sectionRepository     = app.sectionRepository,
-                        recentNotesRepository = app.recentNotesRepository
+                        repository        = app.notebookRepository,
+                        noteRepository    = app.noteRepository,
+                        sectionRepository = app.sectionRepository
                     )
                 )
                 NotebooksScreen(
@@ -84,7 +83,6 @@ fun AppNavigation() {
                         navController.navigate(Screen.Sections.createRoute(notebookId))
                     },
                     onNavigateToEditor   = { sectionId, noteId ->
-                        scope.launch { app.recentNotesRepository.registerOpen(noteId) }
                         navController.navigate(Screen.Editor.createRoute(sectionId, noteId))
                     },
                     onNavigateToSettings = {
@@ -128,7 +126,6 @@ fun AppNavigation() {
                     viewModel              = viewModel,
                     sectionId              = sectionId,
                     onNavigateToEditor     = { sid, noteId ->
-                        scope.launch { app.recentNotesRepository.registerOpen(noteId) }
                         navController.navigate(Screen.Editor.createRoute(sid, noteId))
                     },
                     onNavigateToSubSection = { navController.navigate(Screen.Notes.createRoute(it)) },
@@ -154,7 +151,6 @@ fun AppNavigation() {
                     onNavigateToNote = { _, noteId ->
                         scope.launch {
                             val note = app.noteRepository.getNoteById(noteId) ?: return@launch
-                            app.recentNotesRepository.registerOpen(noteId)
                             navController.navigate(Screen.Editor.createRoute(note.sectionId, noteId))
                         }
                     }
@@ -206,7 +202,6 @@ fun AppNavigation() {
                 SearchScreen(
                     viewModel        = viewModel,
                     onNavigateToNote = { sectionId, noteId ->
-                        scope.launch { app.recentNotesRepository.registerOpen(noteId) }
                         navController.navigate(Screen.Editor.createRoute(sectionId, noteId))
                     },
                     onNavigateBack = { navController.popBackStack() }

@@ -11,7 +11,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -130,10 +129,7 @@ private fun SectionCard(
     onDelete: () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
-    val accentColor = remember(section.color) {
-        try { Color(android.graphics.Color.parseColor(section.color)) }
-        catch (e: Exception) { Color(0xFF8B6914.toInt()) }
-    }
+    val accentColor = MaterialTheme.colorScheme.primary
 
     Card(
         onClick   = onClick,

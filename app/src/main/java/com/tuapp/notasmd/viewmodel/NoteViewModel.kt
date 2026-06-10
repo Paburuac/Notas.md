@@ -113,6 +113,10 @@ class NoteViewModel(
     fun showCreateSubSectionDialog()          = _uiState.update { it.copy(showCreateSubSectionDialog = true) }
     fun hideCreateSubSectionDialog()          = _uiState.update { it.copy(showCreateSubSectionDialog = false) }
 
+    fun togglePin(note: Note) {
+        viewModelScope.launch { noteRepository.setPinned(note.id, !note.isPinned) }
+    }
+
     fun enterSelectionMode(noteId: Long)      = _uiState.update { it.copy(isSelectionMode = true, selectedNoteIds = setOf(noteId)) }
     fun exitSelectionMode()                   = _uiState.update { it.copy(isSelectionMode = false, selectedNoteIds = emptySet()) }
     fun toggleNoteSelection(noteId: Long)     = _uiState.update {

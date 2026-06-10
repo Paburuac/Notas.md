@@ -77,8 +77,9 @@ dependencies {
 
     // Markwon — renderizar Markdown en la vista previa
     implementation(libs.markwon.core)
-    implementation(libs.markwon.html)    // necesario para los <span> de color
+    implementation(libs.markwon.html)
     implementation(libs.markwon.table)
+    implementation(libs.markwon.editor)
 
     // Solo para desarrollo (previews en Android Studio)
     debugImplementation(libs.androidx.ui.tooling)
